@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	livetvweb "github.com/RXWatcher/silo-plugin-livetv/web"
 )
 
 // Routes returns the fully composed http.Handler for the plugin. The shape:
@@ -75,6 +77,10 @@ func (s *Server) Routes() http.Handler {
 			s.mountAdminSettings(adm)
 		})
 	})
+
+	// Serve the embedded React SPA at the plugin mount root and its client-side routes.
+	// More-specific health and API routes above take precedence over this catch-all.
+	r.Handle("/*", livetvweb.SPAHandler())
 
 	return r
 }
