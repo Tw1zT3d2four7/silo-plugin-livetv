@@ -44,14 +44,18 @@ func sharedFallbackClient() *http.Client {
 // refresh. Conditional GET (ETag / Last-Modified) keeps mutation out of the
 // hot path when the upstream is unchanged.
 type M3UWorker struct {
-	Store  *store.Store
-	Client *http.Client
-	Logger hclog.Logger
+	Store           *store.Store
+	Client          *http.Client
+	ClientForSource func(string) *http.Client
+	Logger          hclog.Logger
 }
 
 // httpClient returns the worker's HTTP client, falling back to the shared
 // SSRF-guarded short-lived client when none was supplied.
-func (w *M3UWorker) httpClient() *http.Client {
+func (w *M3UWorker) httpClient(sourceURL string) *http.Client {
+	if w.ClientForSource != nil {
+		return w.ClientForSource(sourceURL)
+	}
 	if w.Client != nil {
 		return w.Client
 	}
@@ -114,7 +118,7 @@ func (w *M3UWorker) RefreshOne(ctx context.Context, id string) error {
 		req.Header.Set("If-Modified-Since", src.LastModified)
 	}
 
-	resp, err := w.httpClient().Do(req)
+	resp, err := w.httpClient(src.URL).Do(req)
 	now := time.Now().UTC()
 	if err != nil {
 		_ = w.Store.MarkM3UStatus(ctx, id, "error: "+err.Error(), src.ETag, src.LastModified, now)
