@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -104,17 +106,50 @@ func isPublicIP(ip net.IP) bool {
 	return true
 }
 
+
+// guardedControlConfiguredSource permits private unicast addresses for an
+// explicitly configured source hostname, but never loopback, link-local,
+// multicast, unspecified, or IPv4 link-local metadata addresses.
+func guardedControlConfiguredSource(network, address string, raw syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return &ErrBlockedAddress{Host: address, IP: host}
+	}
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return &ErrBlockedAddress{Host: address, IP: ip.String()}
+	}
+	if ip4 := ip.To4(); ip4 != nil && ip4[0] == 169 && ip4[1] == 254 {
+		return &ErrBlockedAddress{Host: address, IP: ip.String()}
+	}
+	// For the exact configured host, non-public unicast addresses are an
+	// intentional source destination; the host allowlist is enforced by DialContext.
+	return nil
+}
+
 // newTransport builds an *http.Transport whose dialer enforces the SSRF guard
 // and applies the shared phase timeouts.
-func newTransport() *http.Transport {
-	dialer := &net.Dialer{
-		Timeout:   dialTimeout,
-		KeepAlive: 30 * time.Second,
-		Control:   guardedControl,
-	}
+func newTransport(sourceHost string) *http.Transport {
 	return &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           dialer.DialContext,
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				host = address
+			}
+			allowConfiguredPrivate := sourceHost != "" && strings.EqualFold(strings.Trim(host, "[]"), sourceHost)
+			dialer := &net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}
+			if allowConfiguredPrivate {
+				dialer.Control = guardedControlConfiguredSource
+			} else {
+				dialer.Control = guardedControl
+			}
+			return dialer.DialContext(ctx, network, address)
+		},
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       idleConnTimeout,
@@ -129,7 +164,24 @@ func newTransport() *http.Transport {
 // relies on the request context (cancelled on client disconnect) plus the
 // transport's per-phase timeouts to bound everything but the body read.
 func Streaming() *http.Client {
-	return &http.Client{Transport: newTransport()}
+	return &http.Client{Transport: newTransport("")}
+}
+
+// ShortLivedForSource returns a guarded refresh client that permits RFC1918,
+// CGNAT, and IPv6 ULA destinations only when the dialed hostname exactly
+// matches the hostname explicitly configured for this source. Loopback,
+// link-local, unspecified, multicast, and metadata addresses remain blocked.
+// Redirects to other hostnames continue using the default public-only guard.
+func ShortLivedForSource(rawURL string) *http.Client {
+	parsed, err := url.Parse(rawURL)
+	sourceHost := ""
+	if err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") {
+		sourceHost = strings.ToLower(parsed.Hostname())
+	}
+	return &http.Client{
+		Transport: newTransport(sourceHost),
+		Timeout:   shortLivedTimeout,
+	}
 }
 
 // ShortLived returns a client for refresh and probe work, where the entire
@@ -137,7 +189,7 @@ func Streaming() *http.Client {
 // Client.Timeout in addition to the shared transport phase timeouts.
 func ShortLived() *http.Client {
 	return &http.Client{
-		Transport: newTransport(),
+		Transport: newTransport(""),
 		Timeout:   shortLivedTimeout,
 	}
 }
