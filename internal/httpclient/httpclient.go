@@ -18,6 +18,7 @@
 package httpclient
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
