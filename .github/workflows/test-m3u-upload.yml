@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PLUGIN_NAME: silo-plugin-livetv
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
