@@ -33,6 +33,7 @@ import (
 
 	"crypto/subtle"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/hashicorp/go-hclog"
 
 	"github.com/RXWatcher/silo-plugin-livetv/internal/httpclient"
