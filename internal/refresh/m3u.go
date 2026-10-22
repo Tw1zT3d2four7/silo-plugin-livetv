@@ -81,7 +81,7 @@ func (w *M3UWorker) RefreshAll(ctx context.Context) error {
 	}
 	var errs []error
 	for _, src := range srcs {
-		if !src.Enabled {
+		if !src.Enabled || strings.HasPrefix(src.URL, "upload://") {
 			continue
 		}
 		if err := w.RefreshOne(ctx, src.ID); err != nil {
@@ -100,6 +100,11 @@ func (w *M3UWorker) RefreshOne(ctx context.Context, id string) error {
 	src, err := w.Store.GetM3USource(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get m3u source: %w", err)
+	}
+	// Browser-uploaded playlists are static snapshots, not fetchable URLs.
+	// They stay enabled for playback but are updated only by uploading a new file.
+	if strings.HasPrefix(src.URL, "upload://") {
+		return nil
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src.URL, nil)
