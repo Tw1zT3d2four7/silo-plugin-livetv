@@ -9,10 +9,16 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 concurrency:
   group: plugin-release-${{ github.ref }}
   cancel-in-progress: false
+
+env:
+  PLUGIN_NAME: silo-plugin-livetv
+  MANIFEST_PATH: cmd/silo-plugin-livetv/manifest.json
+  IMAGE_NAME: ghcr.io/tw1zt3d2four7/silo-plugin-livetv
 
 jobs:
   build-and-test:
@@ -46,24 +52,43 @@ jobs:
       - name: Test Go and web code
         run: make test
 
-      - name: Build plugin
-        run: make build
-
-      - name: Generate catalog index
+      - name: Build Linux amd64 plugin
         env:
-          BINARY_NAME: silo-plugin-livetv
-          MANIFEST_PATH: cmd/silo-plugin-livetv/manifest.json
-          BINARY_URL: https://github.com/Tw1zT3d2four7/silo-plugin-livetv/releases/download/plugin-latest/silo-plugin-livetv
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
         run: |
-          checksum="$(sha256sum "$BINARY_NAME" | awk '{print $1}')"
-          jq --arg checksum "$checksum" '.checksum = $checksum' "$MANIFEST_PATH" > catalog-manifest.json
-          jq -n --slurpfile manifest catalog-manifest.json \
-            --arg binary_url "$BINARY_URL" \
-            --arg checksum "$checksum" \
-            '{plugins: [{manifest: $manifest[0], binaries: {"linux/amd64": {url: $binary_url, checksum: $checksum}}}]}' \
-            > catalog.json
+          make build
+          file "$PLUGIN_NAME"
+          sha256sum "$PLUGIN_NAME" | tee "$PLUGIN_NAME.sha256"
 
-      - name: Publish rolling plugin binary
+      - name: Prepare release package
+        run: |
+          checksum="$(sha256sum "$PLUGIN_NAME" | awk '{print $1}')"
+          jq --arg checksum "$checksum" '.checksum = $checksum' "$MANIFEST_PATH" > manifest.json
+          tar -czf "$PLUGIN_NAME-linux-amd64.tar.gz" "$PLUGIN_NAME" manifest.json "$PLUGIN_NAME.sha256"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish package image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/package.Dockerfile
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/Tw1zT3d2four7/silo-plugin-livetv
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Publish rolling release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
@@ -74,18 +99,7 @@ jobs:
           make_latest: false
           overwrite_files: true
           files: |
-            silo-plugin-livetv
-            silo-plugin-livetv.sha256
-
-      - name: Publish catalog index
-        if: github.ref == 'refs/heads/main'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add catalog.json
-          if git diff --cached --quiet; then
-            echo "Catalog index is unchanged."
-          else
-            git commit -m "chore: update plugin catalog [skip ci]"
-            git push origin HEAD:main
-          fi
+            ${{ env.PLUGIN_NAME }}
+            ${{ env.PLUGIN_NAME }}.sha256
+            ${{ env.PLUGIN_NAME }}-linux-amd64.tar.gz
+            manifest.json
