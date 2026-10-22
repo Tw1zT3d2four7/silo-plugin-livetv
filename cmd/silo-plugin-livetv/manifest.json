@@ -41,13 +41,19 @@
   ],
   "http_routes": [
     {
-      "id": "spa",
+      "id": "spa_root",
       "method": "GET",
-      "path": "/*",
+      "path": "/",
       "access": "authenticated",
       "navigable": true,
       "navigation_label": "Live TV",
       "navigation_kind": "user"
+    },
+    {
+      "id": "spa",
+      "method": "GET",
+      "path": "/*",
+      "access": "authenticated"
     },
     {
       "id": "healthz",
