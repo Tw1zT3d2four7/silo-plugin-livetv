@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	livetvweb "github.com/RXWatcher/silo-plugin-livetv/web"
 )
 
 // Routes returns the fully composed http.Handler for the plugin. The shape:
