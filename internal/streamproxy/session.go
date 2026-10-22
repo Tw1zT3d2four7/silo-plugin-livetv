@@ -174,7 +174,7 @@ func (d *Deps) CreateSession(w http.ResponseWriter, r *http.Request) {
 		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https"),
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expires,
 	})
