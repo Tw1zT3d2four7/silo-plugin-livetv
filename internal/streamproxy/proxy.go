@@ -130,11 +130,15 @@ type Deps struct {
 	Store    *store.Store
 	Settings Settings
 	Logger   hclog.Logger
-	// HTTP is used for all upstream calls (probe + proxy). It MUST be an
-	// SSRF-guarded streaming client (see internal/httpclient.Streaming). When
-	// nil, httpClient() lazily builds one so the proxy is never accidentally
-	// wired to an unguarded http.DefaultClient.
+	// HTTP is used as a test/custom fallback upstream client. It MUST be
+	// SSRF-guarded. Production wiring uses HTTPForSource so private unicast
+	// stream hosts explicitly listed in a channel URL can work without
+	// weakening the guard for other destinations.
 	HTTP *http.Client
+	// HTTPForSource creates a streaming client scoped to the explicit channel
+	// or HLS-segment URL being fetched. Private unicast is permitted only for
+	// that exact URL hostname; unsafe special-use ranges remain blocked.
+	HTTPForSource func(string) *http.Client
 	// BasePath is the public mount point (e.g. "/api/v1/livetv"). Defaults to
 	// defaultBasePath when empty.
 	BasePath string
@@ -180,6 +184,18 @@ func (d *Deps) httpClient() *http.Client {
 		d.fallbackClient = httpclient.Streaming()
 	})
 	return d.fallbackClient
+}
+
+// httpClientForSource scopes private-address permission to the exact explicit
+// URL currently being fetched. Injected HTTP clients remain available to tests.
+func (d *Deps) httpClientForSource(rawURL string) *http.Client {
+	if d.HTTPForSource != nil {
+		return d.HTTPForSource(rawURL)
+	}
+	if d.HTTP != nil {
+		return d.HTTP
+	}
+	return httpclient.StreamingForSource(rawURL)
 }
 
 // playlistCacheFor returns the lazily-built playlist cache.
