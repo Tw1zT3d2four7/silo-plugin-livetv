@@ -4,7 +4,6 @@ import { api } from '@/api/client';
 import { HlsPlayer } from '@/player/HlsPlayer';
 import { MpegtsPlayer } from '@/player/MpegtsPlayer';
 import { NowNextPanel } from '@/player/NowNextPanel';
-import { mountPath } from '@/lib/mountPath';
 
 // PlayerPage is the watch surface. Two parallel queries run on mount:
 //   - api.startStream() POSTs to mint a stream session; the response carries
@@ -54,11 +53,7 @@ export function PlayerPage() {
   }
   if (!channelQuery.data) return null;
 
-  // The plugin HTTP bridge exposes the handler beneath /api/v1/plugins/{id}.
-  // The Go handler returns its internal route (/api/v1/livetv/stream/...), so
-  // prepend the installation mount path for browser-facing playback requests.
-  const playbackURL = streamQuery.data.playback_url;
-  const url = playbackURL.startsWith('/') ? `${mountPath()}${playbackURL}` : playbackURL;
+  const url = streamQuery.data.playback_url;
   // Split a query-string off the path so an .m3u8?token=foo URL still
   // matches the suffix check.
   const path = url.split('?')[0] ?? url;
