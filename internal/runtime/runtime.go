@@ -5,8 +5,6 @@ import (
 	"context"
 
 	pluginv1 "github.com/Silo-Server/silo-plugin-sdk/pkg/pluginproto/silo/plugin/v1"
-	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/go-plugin"
 	"github.com/Silo-Server/silo-plugin-sdk/pkg/pluginsdk/runtimedefault"
 )
 
@@ -43,7 +41,3 @@ func (s *Server) Configure(ctx context.Context, req *pluginv1.ConfigureRequest) 
 	}
 	return &pluginv1.ConfigureResponse{}, nil
 }
-
-// Keep the runtime's existing go-plugin protocol dependency explicit for compatibility
-// with the embedded default runtime implementation.
-var _ plugin.Plugin = (*Server)(nil)
