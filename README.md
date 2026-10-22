@@ -59,4 +59,4 @@ GRANT CONNECT ON DATABASE silo TO plugin_livetv;
 
 ## Build and release
 
-CI builds linux-amd64 binaries on push to main via the reusable workflow in [RXWatcher/silo-plugin-repository](https://github.com/RXWatcher/silo-plugin-repository) and publishes them to the catalog at [`./binaries/`](https://github.com/RXWatcher/silo-plugin-repository/tree/main/binaries).
+The repository owns its build and release workflow. Pushes to `main` run Go and web tests, build the Linux AMD64 plugin, publish the binary and SHA-256 file to the rolling `plugin-latest` GitHub Release, and update `catalog.json` in this repository. The workflow does not require RXWatcher's reusable workflow or `CATALOG_SSH_KEY`. The catalog index URL is `https://raw.githubusercontent.com/Tw1zT3d2four7/silo-plugin-livetv/main/catalog.json` after the first successful release.
