@@ -81,7 +81,7 @@ func (d *Deps) ProxyMPEGTS(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set(k, v)
 	}
 
-	resp, err := d.httpClient().Do(req)
+	resp, err := d.httpClientForSource(ch.UpstreamURL).Do(req)
 	if err != nil {
 		_ = d.Store.EndSession(r.Context(), sessID, "upstream_error")
 		d.logger().Warn("upstream get failed", "err", err)
