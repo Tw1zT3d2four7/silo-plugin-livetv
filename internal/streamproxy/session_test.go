@@ -109,6 +109,9 @@ func TestCreateSession_HappyPath(t *testing.T) {
 	if sessCookie.Path != "/" {
 		t.Errorf("cookie Path = %q, want \"/\"", sessCookie.Path)
 	}
+	if sessCookie.Secure {
+		t.Error("Secure cookie should be disabled for plain HTTP test requests")
+	}
 
 	var body struct {
 		SessionID   string    `json:"session_id"`
