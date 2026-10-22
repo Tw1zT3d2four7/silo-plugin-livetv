@@ -185,6 +185,18 @@ func Streaming() *http.Client {
 	return &http.Client{Transport: newTransport("")}
 }
 
+// StreamingForSource returns a streaming client that permits private unicast
+// addresses only for the exact hostname in an explicitly configured channel
+// URL. Redirects to other hosts retain the public-only SSRF guard.
+func StreamingForSource(rawURL string) *http.Client {
+	parsed, err := url.Parse(rawURL)
+	sourceHost := ""
+	if err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") {
+		sourceHost = strings.ToLower(parsed.Hostname())
+	}
+	return &http.Client{Transport: newTransport(sourceHost)}
+}
+
 // ShortLivedForSource returns a guarded refresh client that permits RFC1918,
 // CGNAT, and IPv6 ULA destinations only when the dialed hostname exactly
 // matches the hostname explicitly configured for this source. Loopback,
