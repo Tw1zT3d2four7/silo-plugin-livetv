@@ -120,16 +120,33 @@ func guardedControlConfiguredSource(network, address string, raw syscall.RawConn
 	if ip == nil {
 		return &ErrBlockedAddress{Host: address, IP: host}
 	}
+	if isPublicIP(ip) {
+		return nil
+	}
 	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
 		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
 		return &ErrBlockedAddress{Host: address, IP: ip.String()}
 	}
-	if ip4 := ip.To4(); ip4 != nil && ip4[0] == 169 && ip4[1] == 254 {
-		return &ErrBlockedAddress{Host: address, IP: ip.String()}
+	if ip4 := ip.To4(); ip4 != nil {
+		switch {
+		case ip4[0] == 10:
+			return nil
+		case ip4[0] == 172 && ip4[1]&0xf0 == 16:
+			return nil
+		case ip4[0] == 192 && ip4[1] == 168:
+			return nil
+		case ip4[0] == 100 && ip4[1]&0xc0 == 64:
+			return nil
+		default:
+			return &ErrBlockedAddress{Host: address, IP: ip.String()}
+		}
 	}
-	// For the exact configured host, non-public unicast addresses are an
-	// intentional source destination; the host allowlist is enforced by DialContext.
-	return nil
+	// Permit IPv6 unique-local unicast only; other non-public IPv6 ranges
+	// remain blocked.
+	if len(ip) == net.IPv6len && ip[0]&0xfe == 0xfc {
+		return nil
+	}
+	return &ErrBlockedAddress{Host: address, IP: ip.String()}
 }
 
 // newTransport builds an *http.Transport whose dialer enforces the SSRF guard
