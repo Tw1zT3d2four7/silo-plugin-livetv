@@ -64,6 +64,21 @@ func TestStreamingHasNoOverallTimeout(t *testing.T) {
 	}
 }
 
+func TestStreamingForSourceHasNoOverallTimeout(t *testing.T) {
+	if c := StreamingForSource("http://192.168.1.20:8080/live/1.ts"); c.Timeout != 0 {
+		t.Errorf("StreamingForSource().Timeout = %v, want 0 (unbounded)", c.Timeout)
+	}
+	if err := guardedControlConfiguredSource("tcp", "192.168.1.20:8080", nil); err != nil {
+		t.Errorf("explicit private stream host should be allowed: %v", err)
+	}
+	if err := guardedControlConfiguredSource("tcp", "127.0.0.1:8080", nil); err == nil {
+		t.Error("loopback must remain blocked for stream URLs")
+	}
+	if err := guardedControlConfiguredSource("tcp", "169.254.169.254:80", nil); err == nil {
+		t.Error("metadata address must remain blocked for stream URLs")
+	}
+}
+
 func TestShortLivedHasTimeout(t *testing.T) {
 	if c := ShortLived(); c.Timeout != shortLivedTimeout {
 		t.Errorf("ShortLived().Timeout = %v, want %v", c.Timeout, shortLivedTimeout)
