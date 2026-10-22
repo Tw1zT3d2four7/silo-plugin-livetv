@@ -307,6 +307,7 @@ func TestCreateSession_ProbeDetectsHLS(t *testing.T) {
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),
+		HTTP:     upstream.Client(),
 	}
 	r := newRouter(deps)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/livetv/channels/"+id+"/stream", nil)
