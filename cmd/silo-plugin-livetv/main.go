@@ -110,7 +110,7 @@ func main() {
 		}
 		streamDeps := &streamproxy.Deps{
 			Store: st, Settings: snap, Logger: logger.Named("streamproxy"),
-			HTTP: streamClient, Limits: limits,
+			HTTP: streamClient, HTTPForSource: httpclient.StreamingForSource, Limits: limits,
 		}
 		m3uWorker := &refresh.M3UWorker{Store: st, ClientForSource: httpclient.ShortLivedForSource, Logger: logger.Named("m3u")}
 		xmltvWorker := &refresh.XMLTVWorker{Store: st, ClientForSource: httpclient.ShortLivedForSource, Logger: logger.Named("xmltv")}
