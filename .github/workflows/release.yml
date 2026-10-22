@@ -49,8 +49,8 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Install frontend dependencies
-        run: pnpm --dir web install --frozen-lockfile
+      - name: Build embedded frontend before Go tests
+        run: make web
 
       - name: Test Go and web code
         run: make test
