@@ -63,7 +63,7 @@ jobs:
         run: |
           make build
           file "$PLUGIN_NAME"
-          sha256sum "$PLUGIN_NAME" | tee "$PLUGIN_NAME.sha256"
+          sha256sum "$PLUGIN_NAME" | awk '{print $1}' > "$PLUGIN_NAME.sha256"
 
       - name: Prepare release package
         run: |
