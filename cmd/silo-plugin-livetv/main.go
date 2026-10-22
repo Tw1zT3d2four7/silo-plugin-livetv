@@ -153,7 +153,7 @@ func main() {
 			Runtime: rt, HttpRoutes: httpSrv, ScheduledTask: sched,
 		},
 	})
-
+}
 
 // envDuration reads a Go-duration env var, falling back to def when unset or
 // unparseable. A blank value is treated as unset (use the default).
