@@ -230,7 +230,7 @@ func (d *Deps) headProbe(ctx context.Context, rawURL string, headers map[string]
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := d.httpClient().Do(req)
+	resp, err := d.httpClientForSource(rawURL).Do(req)
 	if err != nil {
 		return "", false
 	}
@@ -263,7 +263,7 @@ func (d *Deps) getSniff(ctx context.Context, rawURL string, headers map[string]s
 	}
 	// Range request so well-behaved upstreams stream us a fraction of a packet.
 	req.Header.Set("Range", "bytes=0-511")
-	resp, err := d.httpClient().Do(req)
+	resp, err := d.httpClientForSource(rawURL).Do(req)
 	if err != nil {
 		return "mpegts", err
 	}
