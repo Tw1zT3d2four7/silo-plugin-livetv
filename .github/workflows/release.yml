@@ -1,14 +1,78 @@
-name: Release
+name: Build and publish plugin
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   release:
-    uses: RXWatcher/silo-plugin-repository/.github/workflows/build-plugin.yml@main
-    secrets:
-      CATALOG_SSH_KEY: ${{ secrets.CATALOG_SSH_KEY }}
-    with:
-      plugin_name: silo-plugin-livetv
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build plugin
+        run: make build
+
+      - name: Generate catalog index
+        env:
+          BINARY_NAME: silo-plugin-livetv
+          MANIFEST_PATH: cmd/silo-plugin-livetv/manifest.json
+          BINARY_URL: https://github.com/Tw1zT3d2four7/silo-plugin-livetv/releases/download/plugin-latest/silo-plugin-livetv
+        run: |
+          checksum="$(sha256sum "$BINARY_NAME" | awk '{print $1}')"
+          jq --arg checksum "$checksum" '.checksum = $checksum' "$MANIFEST_PATH" > catalog-manifest.json
+          jq -n --slurpfile manifest catalog-manifest.json \
+            --arg binary_url "$BINARY_URL" \
+            --arg checksum "$checksum" \
+            '{plugins: [{manifest: $manifest[0], binaries: {"linux/amd64": {url: $binary_url, checksum: $checksum}}}]}' \
+            > catalog.json
+
+      - name: Publish rolling plugin binary
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: plugin-latest
+          name: Latest plugin build
+          body: Automated Linux amd64 plugin build for the current main branch.
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          files: |
+            silo-plugin-livetv
+            silo-plugin-livetv.sha256
+
+      - name: Publish catalog index
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add catalog.json
+          if git diff --cached --quiet; then
+            echo "Catalog index is unchanged."
+          else
+            git commit -m "chore: update plugin catalog [skip ci]"
+            git push origin HEAD:main
+          fi
