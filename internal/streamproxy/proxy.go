@@ -291,14 +291,6 @@ func extractToken(r *http.Request) (string, bool) {
 			return v, true
 		}
 	}
-	// The Silo plugin HTTP bridge may not forward Set-Cookie headers from
-	// the plugin's internal response. Media-element requests also cannot set
-	// Authorization headers, so accept the short-lived session token in the
-	// playback URL as a fallback. The token is still verified against the
-	// live session row and its secret using constant-time comparison.
-	if v := r.URL.Query().Get("st"); v != "" {
-		return v, true
-	}
 	return "", false
 }
 
@@ -309,6 +301,19 @@ func extractToken(r *http.Request) (string, bool) {
 func (d *Deps) verifyToken(w http.ResponseWriter, r *http.Request) (string, *store.Session, bool) {
 	raw, ok := extractToken(r)
 	if !ok {
+		// Silo's plugin bridge authenticates each proxied browser request and
+		// stamps X-Silo-User-Id. Media elements cannot reliably carry the
+		// plugin's Set-Cookie through that bridge, so permit the authenticated
+		// Silo user to access only their own live session by its URL session ID.
+		// Routes must be wrapped in RequireSession for this fallback to be safe.
+		userID := UserIDFromContext(r.Context())
+		urlSess := chi.URLParam(r, "session_id")
+		if userID != "" && urlSess != "" {
+			sess, err := d.Store.GetSession(r.Context(), stripExt(urlSess))
+			if err == nil && sess.EndedAt == nil && sess.UserID == userID {
+				return sess.ID, &sess, true
+			}
+		}
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return "", nil, false
 	}
