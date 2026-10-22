@@ -359,7 +359,7 @@ func (s *Server) adminUploadM3USource(w http.ResponseWriter, r *http.Request) {
 
 	src, err := s.Store.CreateM3USource(r.Context(), store.M3USource{
 		Name: name, URL: "upload://" + url.PathEscape(filename),
-		HTTPHeaders: map[string]string{}, Enabled: false,
+		HTTPHeaders: map[string]string{}, Enabled: true,
 		RefreshInterval: 6 * time.Hour,
 		LastStatus: "importing uploaded playlist",
 	})
