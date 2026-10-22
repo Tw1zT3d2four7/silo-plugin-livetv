@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"strings"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -87,6 +89,37 @@ func jsonBody(t *testing.T, v any) *bytes.Buffer {
 	return bytes.NewBuffer(b)
 }
 
+func TestAdminUploadM3USource_ImportsLocalFile(t *testing.T) {
+	pool := testutil.StartPG(t)
+	srv := newAdminTestServer(pool, newFakeAdminWorker(), newFakeAdminWorker())
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", "local-channels.m3u")
+	if err != nil { t.Fatalf("create upload field: %v", err) }
+	playlist := `#EXTM3U
+#EXTINF:-1 tvg-id="one" group-title="News",Channel One
+https://streams.example/one.m3u8
+#EXTINF:-1 tvg-id="two",Channel Two
+https://streams.example/two.ts
+`
+	if _, err := io.WriteString(part, playlist); err != nil { t.Fatalf("write playlist: %v", err) }
+	if err := writer.Close(); err != nil { t.Fatalf("close multipart: %v", err) }
+	req := adminReq(http.MethodPost, "/api/v1/livetv/admin/sources/m3u/upload", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated { t.Fatalf("upload status = %d body=%s", rr.Code, rr.Body.String()) }
+	var result struct {
+		ID string `json:"id"`
+		Name string `json:"name"`
+		Channels int `json:"channels"`
+		Source struct { URL string `json:"url"`; Enabled bool `json:"enabled"`; Status string `json:"last_status"` } `json:"source"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil { t.Fatalf("decode upload result: %v", err) }
+	if result.ID == "" || result.Name != "local-channels" || result.Channels != 2 { t.Fatalf("unexpected upload result: %+v", result) }
+	if result.Source.Enabled || !strings.HasPrefix(result.Source.URL, "upload://") { t.Errorf("uploaded source should be static and disabled: %+v", result.Source) }
+	if !strings.Contains(result.Source.Status, "uploaded 2 channels") { t.Errorf("upload status = %q", result.Source.Status) }
+}
 func TestAdminM3USources_CRUDPlusRefresh(t *testing.T) {
 	pool := testutil.StartPG(t)
 	m3u := newFakeAdminWorker()
