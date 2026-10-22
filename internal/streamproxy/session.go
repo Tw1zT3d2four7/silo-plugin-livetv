@@ -162,13 +162,17 @@ func (d *Deps) CreateSession(w http.ResponseWriter, r *http.Request) {
 		d.logger().Warn("mark tuned failed", "err", err)
 	}
 
-	// Cookie + JSON response.
+	// Cookie + JSON response. The Silo host exposes this plugin under an
+	// installation-specific outer prefix (/api/v1/plugins/{id}) that is not
+	// available in this handler's internal route. Use Path=/ so the browser
+	// sends the opaque session token to the externally prefixed stream URL.
+	// The cookie remains HttpOnly, Secure, SameSite=Lax, and session-scoped.
 	value := tokenValue(sessID, secret)
 	expires := time.Now().Add(sessionCookieTTL).UTC()
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    value,
-		Path:     d.basePath() + "/stream/",
+		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
