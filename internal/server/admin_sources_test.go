@@ -117,7 +117,7 @@ https://streams.example/two.ts
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil { t.Fatalf("decode upload result: %v", err) }
 	if result.ID == "" || result.Name != "local-channels" || result.Channels != 2 { t.Fatalf("unexpected upload result: %+v", result) }
-	if result.Source.Enabled || !strings.HasPrefix(result.Source.URL, "upload://") { t.Errorf("uploaded source should be static and disabled: %+v", result.Source) }
+	if !result.Source.Enabled || !strings.HasPrefix(result.Source.URL, "upload://") { t.Errorf("uploaded source should be enabled for playback and marked static: %+v", result.Source) }
 	if !strings.Contains(result.Source.Status, "uploaded 2 channels") { t.Errorf("upload status = %q", result.Source.Status) }
 }
 func TestAdminM3USources_CRUDPlusRefresh(t *testing.T) {
