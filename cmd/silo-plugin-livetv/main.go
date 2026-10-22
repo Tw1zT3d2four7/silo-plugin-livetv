@@ -2,10 +2,8 @@
 // It serves an IPTV / M3U live TV portal with XMLTV EPG over the Silo
 // plugin gRPC surface.
 //
-// Phase 1 is bootstrap-only: it embeds the manifest, applies database
-// migrations, opens a pgxpool, exposes a single healthz route, and starts
-// the gRPC plugin runtime. Later phases wire in capability handlers,
-// scheduled tasks, the stream proxy, and the embedded SPA.
+// The plugin starts its runtime before opening PostgreSQL so the host can deliver
+// saved global configuration through Configure. Database-backed capabilities are wired after configuration.
 package main
 
 import (
@@ -15,6 +13,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 	goruntime "runtime"
 	"strconv"
 	"time"
@@ -60,111 +60,100 @@ func main() {
 		return
 	}
 
-	dsn := os.Getenv("PLUGIN_CONFIG_DATABASE_URL")
-	if dsn == "" {
-		fmt.Fprintln(os.Stderr, "PLUGIN_CONFIG_DATABASE_URL is required")
-		os.Exit(1)
-	}
 
-	ctx := context.Background()
-	if err := migrate.Run(ctx, dsn); err != nil {
-		fmt.Fprintf(os.Stderr, "migrate: %v\n", err)
-		os.Exit(1)
-	}
-
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "pgxpool: %v\n", err)
-		os.Exit(1)
-	}
-	defer pool.Close()
-
-	st := store.New(pool)
-
-	// Settings snapshot: pre-populated from the singleton settings row, kept
-	// hot by the admin PUT /admin/settings handler. Replaces StaticSettings
-	// across both the stream-proxy and the server-level Settings field so the
-	// operator can edit caps and timeouts at runtime.
-	snap, err := settings.Load(ctx, st)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "load settings snapshot: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Upstream HTTP clients are SSRF-guarded (see internal/httpclient). The
-	// stream proxy uses a no-overall-timeout streaming client so long-lived
-	// MPEG-TS / HLS reads aren't killed; refresh workers use a short-lived
-	// client so a slow provider can't pin a refresh goroutine.
-	streamClient := httpclient.Streaming()
-	refreshClient := httpclient.ShortLived()
-
-	// Host-protection limits: a short playlist cache plus global concurrency
-	// ceilings and a per-user request rate limit. All are operator-tunable via
-	// PLUGIN_CONFIG_* env vars and default to safe, generous values so the
-	// guards are on by default without surprising existing deployments.
-	limits := streamproxy.Limits{
-		PlaylistCacheTTL:  envDuration("PLUGIN_CONFIG_PLAYLIST_CACHE_TTL", 2*time.Second),
-		GlobalStreamCap:   envInt("PLUGIN_CONFIG_GLOBAL_STREAM_CAP", 500),
-		GlobalUpstreamCap: envInt("PLUGIN_CONFIG_GLOBAL_UPSTREAM_CAP", 500),
-		PerUserRatePerSec: envFloat("PLUGIN_CONFIG_PER_USER_RATE_PER_SEC", 10),
-		PerUserBurst:      envFloat("PLUGIN_CONFIG_PER_USER_BURST", 20),
-	}
-
-	streamDeps := &streamproxy.Deps{
-		Store:    st,
-		Settings: snap,
-		Logger:   logger.Named("streamproxy"),
-		HTTP:     streamClient,
-		Limits:   limits,
-	}
-
-	// Build the live workers up-front so the admin handler and the scheduler
-	// share the same instances. depsFn closes over them so future Configure
-	// calls can swap dependencies underneath the running gRPC server.
-	m3uWorker := &refresh.M3UWorker{Store: st, Client: refreshClient, Logger: logger.Named("m3u")}
-	xmltvWorker := &refresh.XMLTVWorker{Store: st, Client: refreshClient, Logger: logger.Named("xmltv")}
-
-	// Build the server package's HTTP handler — single source of truth for the
-	// URL map. All routes (user API, admin API, stream-proxy bytes) are
-	// mounted here; the httproutes capability bridge wraps it.
-	srv := &server.Server{
-		Store:         st,
-		Stream:        streamDeps,
-		Settings:      snap,
-		Logger:        logger.Named("api"),
-		M3UWorker:     m3uWorker,
-		XMLTVWorker:   xmltvWorker,
-		Snapshot:      snap,
-		GuideCacheTTL: envDuration("PLUGIN_CONFIG_GUIDE_CACHE_TTL", 5*time.Second),
-		AuditLogger:   logger.Named("audit"),
-	}
-
+	// Database-dependent services are initialized by the host's Configure RPC.
+	// The host starts this process before sending saved global configuration.
 	httpSrv := httproutes.NewServer()
-	httpSrv.SetHandler(srv.Routes())
+	var depsMu sync.RWMutex
+	var deps *scheduler.Deps
+	var poolsMu sync.Mutex
+	var pools []*pgxpool.Pool
 
-	rt := pluginrt.New(manifest)
-
-	// SnapshotReaper consumes the same snapshot the admin handler updates, so
-	// edits propagate to the reaper on the next tick without a DB read.
-	reaper := &scheduler.SnapshotReaper{Store: st, Settings: snap, Logger: logger.Named("reaper")}
-	sched := scheduler.New(func() *scheduler.Deps {
-		return &scheduler.Deps{
-			Store:  st,
-			M3U:    m3uWorker,
-			XMLTV:  xmltvWorker,
-			Reaper: reaper,
+	rt := pluginrt.New(manifest, func(configCtx context.Context, entries []*pluginv1.ConfigEntry) error {
+		dsn := ""
+		for _, entry := range entries {
+			if entry == nil || entry.GetKey() != "database_url" || entry.GetValue() == nil {
+				continue
+			}
+			if value, ok := entry.GetValue().AsMap()["value"].(string); ok {
+				dsn = strings.TrimSpace(value)
+			}
 		}
+		if dsn == "" {
+			return fmt.Errorf("required global config database_url.value is missing")
+		}
+		if err := migrate.Run(configCtx, dsn); err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+		pool, err := pgxpool.New(configCtx, dsn)
+		if err != nil {
+			return fmt.Errorf("pgxpool: %w", err)
+		}
+		if err := pool.Ping(configCtx); err != nil {
+			pool.Close()
+			return fmt.Errorf("connect to plugin database: %w", err)
+		}
+		st := store.New(pool)
+		snap, err := settings.Load(configCtx, st)
+		if err != nil {
+			pool.Close()
+			return fmt.Errorf("load settings snapshot: %w", err)
+		}
+
+		streamClient := httpclient.Streaming()
+		refreshClient := httpclient.ShortLived()
+		limits := streamproxy.Limits{
+			PlaylistCacheTTL: envDuration("PLUGIN_CONFIG_PLAYLIST_CACHE_TTL", 2*time.Second),
+			GlobalStreamCap: envInt("PLUGIN_CONFIG_GLOBAL_STREAM_CAP", 500),
+			GlobalUpstreamCap: envInt("PLUGIN_CONFIG_GLOBAL_UPSTREAM_CAP", 500),
+			PerUserRatePerSec: envFloat("PLUGIN_CONFIG_PER_USER_RATE_PER_SEC", 10),
+			PerUserBurst: envFloat("PLUGIN_CONFIG_PER_USER_BURST", 20),
+		}
+		streamDeps := &streamproxy.Deps{
+			Store: st, Settings: snap, Logger: logger.Named("streamproxy"),
+			HTTP: streamClient, Limits: limits,
+		}
+		m3uWorker := &refresh.M3UWorker{Store: st, Client: refreshClient, Logger: logger.Named("m3u")}
+		xmltvWorker := &refresh.XMLTVWorker{Store: st, Client: refreshClient, Logger: logger.Named("xmltv")}
+		srv := &server.Server{
+			Store: st, Stream: streamDeps, Settings: snap, Logger: logger.Named("api"),
+			M3UWorker: m3uWorker, XMLTVWorker: xmltvWorker, Snapshot: snap,
+			GuideCacheTTL: envDuration("PLUGIN_CONFIG_GUIDE_CACHE_TTL", 5*time.Second),
+			AuditLogger: logger.Named("audit"),
+		}
+		reaper := &scheduler.SnapshotReaper{Store: st, Settings: snap, Logger: logger.Named("reaper")}
+
+		httpSrv.SetHandler(srv.Routes())
+		depsMu.Lock()
+		deps = &scheduler.Deps{Store: st, M3U: m3uWorker, XMLTV: xmltvWorker, Reaper: reaper}
+		depsMu.Unlock()
+		poolsMu.Lock()
+		pools = append(pools, pool)
+		poolsMu.Unlock()
+		return nil
+	})
+
+	sched := scheduler.New(func() *scheduler.Deps {
+		depsMu.RLock()
+		defer depsMu.RUnlock()
+		return deps
 	}, logger)
+
+	defer func() {
+		poolsMu.Lock()
+		defer poolsMu.Unlock()
+		for _, pool := range pools {
+			pool.Close()
+		}
+	}()
 
 	sdkruntime.Serve(sdkruntime.ServeConfig{
 		Logger: logger,
 		Servers: sdkruntime.CapabilityServers{
-			Runtime:       rt,
-			HttpRoutes:    httpSrv,
-			ScheduledTask: sched,
+			Runtime: rt, HttpRoutes: httpSrv, ScheduledTask: sched,
 		},
 	})
-}
+
 
 // envDuration reads a Go-duration env var, falling back to def when unset or
 // unparseable. A blank value is treated as unset (use the default).
