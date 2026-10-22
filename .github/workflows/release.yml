@@ -6,6 +6,7 @@ on:
       - main
       - fix/self-contained-release-workflow
       - m3u-private-source-and-file-upload
+      - iptv-alpha
   pull_request:
     branches:
       - main
