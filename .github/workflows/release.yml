@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - fix/self-contained-release-workflow
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
