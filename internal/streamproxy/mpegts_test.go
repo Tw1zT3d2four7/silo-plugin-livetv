@@ -67,6 +67,7 @@ func TestProxyMPEGTS_HappyPath(t *testing.T) {
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),
+		HTTP:     upstream.Client(),
 	}
 	r := chi.NewRouter()
 	r.Get("/api/v1/livetv/stream/{session_id}.ts", deps.ProxyMPEGTS)
