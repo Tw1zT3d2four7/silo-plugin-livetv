@@ -74,7 +74,7 @@ func TestRefreshOne_HappyPath(t *testing.T) {
 	defer srv.Close()
 
 	id := seedM3USource(t, ctx, s, srv.URL)
-	w := &refresh.M3UWorker{Store: s, Logger: hclog.NewNullLogger()}
+	w := &refresh.M3UWorker{Store: s, Client: testutil.LocalHTTPClient(), Logger: hclog.NewNullLogger()}
 
 	if err := w.RefreshOne(ctx, id); err != nil {
 		t.Fatalf("refresh: %v", err)
@@ -125,7 +125,7 @@ func TestRefreshOne_304_NoMutation(t *testing.T) {
 	defer srv.Close()
 
 	id := seedM3USource(t, ctx, s, srv.URL)
-	w := &refresh.M3UWorker{Store: s, Logger: hclog.NewNullLogger()}
+	w := &refresh.M3UWorker{Store: s, Client: testutil.LocalHTTPClient(), Logger: hclog.NewNullLogger()}
 	if err := w.RefreshOne(ctx, id); err != nil {
 		t.Fatalf("first refresh: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestRefreshOne_SoftDisablesMissingChannels(t *testing.T) {
 	defer srv.Close()
 
 	id := seedM3USource(t, ctx, s, srv.URL)
-	w := &refresh.M3UWorker{Store: s, Logger: hclog.NewNullLogger()}
+	w := &refresh.M3UWorker{Store: s, Client: testutil.LocalHTTPClient(), Logger: hclog.NewNullLogger()}
 	if err := w.RefreshOne(ctx, id); err != nil {
 		t.Fatalf("first refresh: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestRefreshOne_HTTPError(t *testing.T) {
 	defer srv.Close()
 
 	id := seedM3USource(t, ctx, s, srv.URL)
-	w := &refresh.M3UWorker{Store: s, Logger: hclog.NewNullLogger()}
+	w := &refresh.M3UWorker{Store: s, Client: testutil.LocalHTTPClient(), Logger: hclog.NewNullLogger()}
 	if err := w.RefreshOne(ctx, id); err == nil {
 		t.Fatal("expected error for HTTP 500")
 	}
@@ -266,7 +266,7 @@ func TestRefreshOne_FallbackSourceChannelIDWhenNoTvgID(t *testing.T) {
 	defer srv.Close()
 
 	id := seedM3USource(t, ctx, s, srv.URL)
-	w := &refresh.M3UWorker{Store: s, Logger: hclog.NewNullLogger()}
+	w := &refresh.M3UWorker{Store: s, Client: testutil.LocalHTTPClient(), Logger: hclog.NewNullLogger()}
 
 	if err := w.RefreshOne(ctx, id); err != nil {
 		t.Fatalf("first refresh: %v", err)

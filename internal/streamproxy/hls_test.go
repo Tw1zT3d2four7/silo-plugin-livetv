@@ -181,6 +181,7 @@ func TestProxyHLSSegment_HappyPath(t *testing.T) {
 	sessID, cookieVal, secret := mintSession(t, ctx, s, "u", chID)
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),
@@ -219,6 +220,7 @@ func TestProxyHLSSegment_TamperedToken(t *testing.T) {
 	sessID, cookieVal, secret := mintSession(t, ctx, s, "u", chID)
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),
@@ -254,6 +256,7 @@ func TestProxyHLSSegment_Expired(t *testing.T) {
 	sessID, cookieVal, secret := mintSession(t, ctx, s, "u", chID)
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),
@@ -301,6 +304,7 @@ func TestProxyHLSSegment_IdleReaperEndsSession(t *testing.T) {
 	}
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: settings,
 		Logger:   hclog.NewNullLogger(),
@@ -337,6 +341,7 @@ func TestProxyHLSPlaylist_HappyPath(t *testing.T) {
 	sessID, cookieVal, _ := mintSession(t, ctx, s, "u", chID)
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),

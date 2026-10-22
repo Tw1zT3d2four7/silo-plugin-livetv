@@ -78,6 +78,7 @@ func TestCreateSession_HappyPath(t *testing.T) {
 	chID := seedChannel(t, ctx, s, src, "ch1", "http://example.invalid/ch1.ts")
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5, IdleTimeout: 60 * time.Second},
 		Logger:   hclog.NewNullLogger(),
@@ -158,6 +159,7 @@ func TestCreateSession_Unauthenticated(t *testing.T) {
 	chID := seedChannel(t, ctx, s, src, "c", "http://x/c.ts")
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),
@@ -174,6 +176,7 @@ func TestCreateSession_UnknownChannel(t *testing.T) {
 	pool := testutil.StartPG(t)
 	s := store.New(pool)
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),
@@ -201,6 +204,7 @@ func TestCreateSession_DisabledChannel(t *testing.T) {
 	}
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),
@@ -233,6 +237,7 @@ func TestCreateSession_UserCapExceeded(t *testing.T) {
 	}
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 2, PerChannel: 99},
 		Logger:   hclog.NewNullLogger(),
@@ -265,6 +270,7 @@ func TestCreateSession_ChannelCapExceeded(t *testing.T) {
 	}
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 99, PerChannel: 2},
 		Logger:   hclog.NewNullLogger(),
@@ -304,6 +310,7 @@ func TestCreateSession_ProbeDetectsHLS(t *testing.T) {
 	}
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),

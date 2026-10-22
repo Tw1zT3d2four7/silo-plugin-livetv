@@ -64,6 +64,7 @@ func TestProxyMPEGTS_HappyPath(t *testing.T) {
 	sessID, cookieVal, _ := mintSession(t, ctx, s, "u", chID)
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),
@@ -119,6 +120,7 @@ func TestProxyMPEGTS_NoCookie_Unauthorized(t *testing.T) {
 	sessID, _, _ := mintSession(t, ctx, s, "u", chID)
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),
@@ -152,6 +154,7 @@ func TestProxyMPEGTS_UpstreamError(t *testing.T) {
 	sessID, cookieVal, _ := mintSession(t, ctx, s, "u", chID)
 
 	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
 		Store:    s,
 		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
 		Logger:   hclog.NewNullLogger(),

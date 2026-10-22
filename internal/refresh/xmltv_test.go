@@ -91,7 +91,7 @@ func TestRefreshOneXMLTV_HappyPath(t *testing.T) {
 	defer srv.Close()
 
 	id := seedXMLTVSource(t, ctx, s, srv.URL)
-	w := &refresh.XMLTVWorker{Store: s, Logger: hclog.NewNullLogger()}
+	w := &refresh.XMLTVWorker{Store: s, Client: testutil.LocalHTTPClient(), Logger: hclog.NewNullLogger()}
 	if err := w.RefreshOne(ctx, id); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestRefreshOneXMLTV_HandlesGzip(t *testing.T) {
 	defer srv.Close()
 
 	id := seedXMLTVSource(t, ctx, s, srv.URL)
-	w := &refresh.XMLTVWorker{Store: s, Logger: hclog.NewNullLogger()}
+	w := &refresh.XMLTVWorker{Store: s, Client: testutil.LocalHTTPClient(), Logger: hclog.NewNullLogger()}
 	if err := w.RefreshOne(ctx, id); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestRefreshOneXMLTV_ReplaceFutureClearsStale(t *testing.T) {
 	defer srv.Close()
 
 	srcID := seedXMLTVSource(t, ctx, s, srv.URL)
-	w := &refresh.XMLTVWorker{Store: s, Logger: hclog.NewNullLogger()}
+	w := &refresh.XMLTVWorker{Store: s, Client: testutil.LocalHTTPClient(), Logger: hclog.NewNullLogger()}
 
 	// Run 1: rep1 gets A,B,C.
 	if err := w.RefreshOne(ctx, srcID); err != nil {
@@ -272,7 +272,7 @@ func TestRefreshOneXMLTV_PruneRemovesAncient(t *testing.T) {
 	}))
 	defer srv.Close()
 	srcID := seedXMLTVSource(t, ctx, s, srv.URL)
-	w := &refresh.XMLTVWorker{Store: s, Logger: hclog.NewNullLogger()}
+	w := &refresh.XMLTVWorker{Store: s, Client: testutil.LocalHTTPClient(), Logger: hclog.NewNullLogger()}
 	if err := w.RefreshOne(ctx, srcID); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -320,7 +320,7 @@ func TestRefreshOneXMLTV_304(t *testing.T) {
 	defer srv.Close()
 	id := seedXMLTVSource(t, ctx, s, srv.URL)
 
-	w := &refresh.XMLTVWorker{Store: s, Logger: hclog.NewNullLogger()}
+	w := &refresh.XMLTVWorker{Store: s, Client: testutil.LocalHTTPClient(), Logger: hclog.NewNullLogger()}
 	if err := w.RefreshOne(ctx, id); err != nil {
 		t.Fatalf("first: %v", err)
 	}
