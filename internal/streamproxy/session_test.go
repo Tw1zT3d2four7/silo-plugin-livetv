@@ -106,8 +106,11 @@ func TestCreateSession_HappyPath(t *testing.T) {
 	if !strings.Contains(sessCookie.Value, ".") {
 		t.Errorf("cookie value %q missing '.' separator", sessCookie.Value)
 	}
-	if sessCookie.Path != "/api/v1/livetv/stream/" {
-		t.Errorf("cookie Path = %q", sessCookie.Path)
+	if sessCookie.Path != "/" {
+		t.Errorf("cookie Path = %q, want \"/\"", sessCookie.Path)
+	}
+	if sessCookie.Secure {
+		t.Error("Secure cookie should be disabled for plain HTTP test requests")
 	}
 
 	var body struct {

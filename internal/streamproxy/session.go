@@ -162,15 +162,19 @@ func (d *Deps) CreateSession(w http.ResponseWriter, r *http.Request) {
 		d.logger().Warn("mark tuned failed", "err", err)
 	}
 
-	// Cookie + JSON response.
+	// Cookie + JSON response. The Silo host exposes this plugin under an
+	// installation-specific outer prefix (/api/v1/plugins/{id}) that is not
+	// available in this handler's internal route. Use Path=/ so the browser
+	// sends the opaque session token to the externally prefixed stream URL.
+	// The cookie remains HttpOnly, Secure, SameSite=Lax, and session-scoped.
 	value := tokenValue(sessID, secret)
 	expires := time.Now().Add(sessionCookieTTL).UTC()
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    value,
-		Path:     d.basePath() + "/stream/",
+		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https"),
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expires,
 	})
@@ -230,7 +234,7 @@ func (d *Deps) headProbe(ctx context.Context, rawURL string, headers map[string]
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := d.httpClient().Do(req)
+	resp, err := d.httpClientForSource(rawURL).Do(req)
 	if err != nil {
 		return "", false
 	}
@@ -263,7 +267,7 @@ func (d *Deps) getSniff(ctx context.Context, rawURL string, headers map[string]s
 	}
 	// Range request so well-behaved upstreams stream us a fraction of a packet.
 	req.Header.Set("Range", "bytes=0-511")
-	resp, err := d.httpClient().Do(req)
+	resp, err := d.httpClientForSource(rawURL).Do(req)
 	if err != nil {
 		return "mpegts", err
 	}

@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/self-contained-release-workflow
+      - m3u-private-source-and-file-upload
   pull_request:
     branches:
       - main
@@ -73,6 +74,21 @@ jobs:
           checksum="$(sha256sum "$PLUGIN_NAME" | awk '{print $1}')"
           jq --arg checksum "$checksum" '.checksum = $checksum' "$MANIFEST_PATH" > manifest.json
           tar -czf "$PLUGIN_NAME-linux-amd64.tar.gz" "$PLUGIN_NAME" manifest.json "$PLUGIN_NAME.sha256"
+
+      - name: Upload test build artifact
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: silo-plugin-livetv-test-${{ github.sha }}
+          path: |
+            ${{ env.PLUGIN_NAME }}
+            ${{ env.PLUGIN_NAME }}.sha256
+            ${{ env.PLUGIN_NAME }}-linux-amd64.tar.gz
+            plugin-linux-amd64
+            checksums.txt
+            manifest.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3

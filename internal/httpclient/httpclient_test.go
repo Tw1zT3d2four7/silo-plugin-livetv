@@ -64,6 +64,21 @@ func TestStreamingHasNoOverallTimeout(t *testing.T) {
 	}
 }
 
+func TestStreamingForSourceHasNoOverallTimeout(t *testing.T) {
+	if c := StreamingForSource("http://192.168.1.20:8080/live/1.ts"); c.Timeout != 0 {
+		t.Errorf("StreamingForSource().Timeout = %v, want 0 (unbounded)", c.Timeout)
+	}
+	if err := guardedControlConfiguredSource("tcp", "192.168.1.20:8080", nil); err != nil {
+		t.Errorf("explicit private stream host should be allowed: %v", err)
+	}
+	if err := guardedControlConfiguredSource("tcp", "127.0.0.1:8080", nil); err == nil {
+		t.Error("loopback must remain blocked for stream URLs")
+	}
+	if err := guardedControlConfiguredSource("tcp", "169.254.169.254:80", nil); err == nil {
+		t.Error("metadata address must remain blocked for stream URLs")
+	}
+}
+
 func TestShortLivedHasTimeout(t *testing.T) {
 	if c := ShortLived(); c.Timeout != shortLivedTimeout {
 		t.Errorf("ShortLived().Timeout = %v, want %v", c.Timeout, shortLivedTimeout)
@@ -82,6 +97,19 @@ func TestRedactURL(t *testing.T) {
 	for _, c := range cases {
 		if got := RedactURL(c.in); got != c.want {
 			t.Errorf("RedactURL(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestConfiguredSourceGuardAllowsPrivateUnicastOnly(t *testing.T) {
+	for _, address := range []string{"10.0.0.1:80", "172.16.0.1:80", "192.168.1.1:80", "100.64.0.1:80", "[fd12:3456::1]:80", "8.8.8.8:80"} {
+		if err := guardedControlConfiguredSource("tcp", address, nil); err != nil {
+			t.Errorf("configured source address %s should pass: %v", address, err)
+		}
+	}
+	for _, address := range []string{"127.0.0.1:80", "169.254.169.254:80", "0.0.0.0:80", "192.0.0.1:80", "[::1]:80", "[fe80::1]:80"} {
+		if err := guardedControlConfiguredSource("tcp", address, nil); err == nil {
+			t.Errorf("configured source address %s should remain blocked", address)
 		}
 	}
 }

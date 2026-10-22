@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0a0a0b" />
   <title>Live TV</title>
+  <script>
+    // Silo serves this SPA from /api/v1/plugins/{installationId}/, but
+    // client-side routes such as /watch/{channelId} add path segments. Vite's
+    // relative asset URLs would otherwise resolve beneath /watch/assets.
+    // Set the document base to the installation root before bundled assets
+    // are parsed, deriving the installation ID at runtime.
+    const pluginMount = window.location.pathname.match(/^(\/api\/v1\/plugins\/\d+)/)?.[1];
+    const base = document.createElement('base');
+    base.href = pluginMount ? pluginMount + '/' : '/';
+    document.head.appendChild(base);
+  </script>
 </head>
 <body class="bg-zinc-950 text-zinc-50">
   <div id="root"></div>

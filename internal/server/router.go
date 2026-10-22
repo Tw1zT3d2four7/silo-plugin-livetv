@@ -58,11 +58,18 @@ func (s *Server) Routes() http.Handler {
 			}
 		})
 
-		// Stream byte routes: cookie/bearer auth, no session header needed.
+		// Stream byte routes accept the plugin's stream cookie/bearer when
+		// available, but also need Silo's authenticated user context because
+		// the host bridge may not forward Set-Cookie from CreateSession to the
+		// browser. The stream proxy fallback only allows that user to read
+		// their own live session, never another user's session.
 		if s.Stream != nil {
-			api.Get("/stream/{session_id}.ts", s.Stream.ProxyMPEGTS)
-			api.Get("/stream/{session_id}.m3u8", s.Stream.ProxyHLSPlaylist)
-			api.Get("/stream/{session_id}/segment", s.Stream.ProxyHLSSegment)
+			api.Group(func(stream chi.Router) {
+				stream.Use(RequireSession)
+				stream.Get("/stream/{session_id}.ts", s.Stream.ProxyMPEGTS)
+				stream.Get("/stream/{session_id}.m3u8", s.Stream.ProxyHLSPlaylist)
+				stream.Get("/stream/{session_id}/segment", s.Stream.ProxyHLSSegment)
+			})
 		}
 
 		// Admin subrouter — gated by RequireAdmin. Sub-mounts live in

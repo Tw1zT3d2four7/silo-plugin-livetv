@@ -103,6 +103,44 @@ func TestProxyMPEGTS_HappyPath(t *testing.T) {
 	}
 }
 
+func TestProxyMPEGTS_SiloAuthenticatedUserWithoutCookie(t *testing.T) {
+	pool := testutil.StartPG(t)
+	s := store.New(pool)
+	ctx := context.Background()
+
+	payload := []byte("authenticated Silo stream")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "video/mp2t")
+		_, _ = w.Write(payload)
+	}))
+	defer upstream.Close()
+
+	srcID := seedM3USource(t, ctx, s, upstream.URL)
+	chID := seedChannel(t, ctx, s, srcID, "silo-auth", upstream.URL)
+	sessID, _, _ := mintSession(t, ctx, s, "silo-user", chID)
+
+	deps := &streamproxy.Deps{
+		HTTP: testutil.LocalHTTPClient(),
+		Store: s,
+		Settings: streamproxy.StaticSettings{PerUser: 3, PerChannel: 5},
+		Logger: hclog.NewNullLogger(),
+	}
+	r := chi.NewRouter()
+	r.Get("/api/v1/livetv/stream/{session_id}.ts", deps.ProxyMPEGTS)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/livetv/stream/"+sessID+".ts", nil)
+	req = req.WithContext(streamproxy.WithUserID(req.Context(), "silo-user"))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s; expected Silo-authenticated user to play without stream cookie", rr.Code, rr.Body.String())
+	}
+	if !bytes.Equal(rr.Body.Bytes(), payload) {
+		t.Fatalf("body = %q, want %q", rr.Body.Bytes(), payload)
+	}
+}
+
 func TestProxyMPEGTS_NoCookie_Unauthorized(t *testing.T) {
 	pool := testutil.StartPG(t)
 	s := store.New(pool)

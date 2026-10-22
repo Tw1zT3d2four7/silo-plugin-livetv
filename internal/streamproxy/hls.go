@@ -196,7 +196,7 @@ func (d *Deps) fetchPlaylistBody(r *http.Request, ch store.Channel) ([]byte, boo
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := d.httpClient().Do(req)
+	resp, err := d.httpClientForSource(ch.UpstreamURL).Do(req)
 	if err != nil {
 		d.logger().Warn("upstream playlist fetch failed", "err", err)
 		return nil, false
@@ -279,7 +279,7 @@ func (d *Deps) ProxyHLSSegment(w http.ResponseWriter, r *http.Request) {
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := d.httpClient().Do(req)
+	resp, err := d.httpClientForSource(uri).Do(req)
 	if err != nil {
 		d.logger().Warn("upstream segment fetch failed", "err", err)
 		http.Error(w, "bad upstream", http.StatusBadGateway)

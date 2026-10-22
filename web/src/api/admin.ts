@@ -22,7 +22,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     Accept: 'application/json',
     ...(init?.headers as Record<string, string> | undefined),
   };
-  if (init?.body != null && !headers['Content-Type']) {
+  if (init?.body != null && !headers['Content-Type'] && !(typeof FormData !== 'undefined' && init.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
   const res = await fetch(apiBase() + path, {
@@ -154,6 +154,14 @@ export interface AdminSettings {
 export const adminApi = {
   sources: {
     m3uList: () => req<ListEnvelope<AdminM3USource>>('/admin/sources/m3u'),
+    m3uUpload: (file: File) => {
+      const body = new FormData();
+      body.append('file', file, file.name);
+      return req<{ id: string; name: string; channels: number; source: AdminM3USource }>(
+        '/admin/sources/m3u/upload',
+        { method: 'POST', body },
+      );
+    },
     m3uCreate: (input: AdminM3USourceInput) =>
       req<AdminM3USource>('/admin/sources/m3u', {
         method: 'POST',

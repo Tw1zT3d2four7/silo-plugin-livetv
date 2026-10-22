@@ -92,6 +92,13 @@ function TopNav() {
       {tab({ to: '/search', label: 'Search' })}
       <div className="ml-auto" />
       {tab({ to: '/admin', label: 'Admin' })}
+      <a
+        href="/"
+        aria-label="Return to Silo home"
+        className="rounded-md border border-[color:var(--color-border)] px-3 py-1.5 text-sm font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-surface)]"
+      >
+        Back to Silo
+      </a>
     </nav>
   );
 }
