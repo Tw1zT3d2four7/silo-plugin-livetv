@@ -2,15 +2,20 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"path/filepath"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/RXWatcher/silo-plugin-livetv/internal/m3u"
 	"github.com/RXWatcher/silo-plugin-livetv/internal/store"
 	"github.com/RXWatcher/silo-plugin-livetv/internal/streamproxy"
 )
@@ -230,6 +235,7 @@ func parseRefreshInterval(s string) (time.Duration, error) {
 func (s *Server) mountAdminSources(r chi.Router) {
 	r.Route("/sources/m3u", func(m chi.Router) {
 		m.Get("/", s.adminListM3USources)
+		m.Post("/upload", s.adminUploadM3USource)
 		m.Post("/", s.adminCreateM3USource)
 		m.Get("/{id}", s.adminGetM3USource)
 		m.Put("/{id}", s.adminUpdateM3USource)
@@ -291,6 +297,117 @@ func (s *Server) adminCreateM3USource(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditSourceMutation(r.Context(), "create", "m3u", src.ID, req.URL, req.HTTPHeaders)
 	writeJSON(w, http.StatusCreated, toAdminM3UDTO(src))
+}
+
+
+// maxM3UUploadBytes bounds browser-uploaded playlist bodies to avoid unbounded
+// memory or database work from a malformed multipart request.
+const maxM3UUploadBytes = 32 << 20
+
+// adminUploadM3USource imports a user-selected local M3U file as a static
+// source. The browser sends the bytes; the server never tries to open a path
+// on the Silo host. Upload sources are disabled for scheduled refresh and can
+// be updated by uploading a replacement playlist.
+func (s *Server) adminUploadM3USource(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxM3UUploadBytes)
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		writeErrorMsg(w, http.StatusBadRequest, "could not read uploaded playlist (maximum size 32 MiB)")
+		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeErrorMsg(w, http.StatusBadRequest, "choose an M3U file to upload")
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxM3UUploadBytes+1))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if len(data) > maxM3UUploadBytes {
+		writeErrorMsg(w, http.StatusRequestEntityTooLarge, "M3U file exceeds 32 MiB")
+		return
+	}
+	entries, err := m3u.Parse(strings.NewReader(string(data)))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if len(entries) == 0 {
+		writeErrorMsg(w, http.StatusBadRequest, "playlist contains no channel entries")
+		return
+	}
+
+	filename := filepath.Base(strings.TrimSpace(header.Filename))
+	if filename == "" || filename == "." || filename == "/" {
+		filename = "playlist.m3u"
+	}
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		name = strings.TrimSuffix(filename, filepath.Ext(filename))
+	}
+	if len(name) > 160 {
+		writeErrorMsg(w, http.StatusBadRequest, "playlist name must be 160 characters or fewer")
+		return
+	}
+
+	src, err := s.Store.CreateM3USource(r.Context(), store.M3USource{
+		Name: name, URL: "upload://" + url.PathEscape(filename),
+		HTTPHeaders: map[string]string{}, Enabled: false,
+		RefreshInterval: 6 * time.Hour,
+		LastStatus: "importing uploaded playlist",
+	})
+	if err != nil {
+		s.logger().Warn("create uploaded m3u source", "err", err)
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	seen := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		sourceChannelID := entry.TvgID
+		if sourceChannelID == "" {
+			sum := sha256.Sum256([]byte(entry.URL))
+			title := strings.ToLower(strings.Join(strings.Fields(entry.Title), "-"))
+			sourceChannelID = "name:" + title + ":" + hex.EncodeToString(sum[:4])
+		}
+		_, err := s.Store.UpsertChannelFromM3U(r.Context(), store.Channel{
+			SourceM3UID: src.ID, SourceChannelID: sourceChannelID,
+			DisplayName: entry.Title, LogoURL: entry.TvgLogo,
+			UpstreamURL: entry.URL, ChannelNumberSrc: entry.TvgChno,
+			GroupTitleSrc: entry.GroupTitle, Attrs: entry.Attrs,
+		})
+		if err != nil {
+			_ = s.Store.DeleteM3USource(r.Context(), src.ID)
+			s.logger().Warn("import uploaded m3u channel", "source", src.ID, "err", err)
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		seen = append(seen, sourceChannelID)
+	}
+	if err := s.Store.MarkChannelsMissing(r.Context(), src.ID, seen); err != nil {
+		_ = s.Store.DeleteM3USource(r.Context(), src.ID)
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	status := fmt.Sprintf("uploaded %d channels (static file; upload again to update)", len(entries))
+	if err := s.Store.MarkM3UStatus(r.Context(), src.ID, status, "", "", time.Now().UTC()); err != nil {
+		_ = s.Store.DeleteM3USource(r.Context(), src.ID)
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.auditSourceMutation(r.Context(), "upload", "m3u", src.ID, src.URL, nil)
+	src.LastStatus = status
+	now := time.Now().UTC()
+	src.LastRefreshedAt = &now
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id": src.ID, "name": src.Name, "channels": len(entries), "source": toAdminM3UDTO(src),
+	})
 }
 
 // adminGetM3USource handles GET /admin/sources/m3u/{id}.
