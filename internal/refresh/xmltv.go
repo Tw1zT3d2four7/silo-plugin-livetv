@@ -25,14 +25,18 @@ const pruneAge = 6 * time.Hour
 // into the store, and auto-links channels by source_channel_id. Mirrors the
 // shape of M3UWorker so the scheduler can dispatch them uniformly.
 type XMLTVWorker struct {
-	Store  *store.Store
-	Client *http.Client
-	Logger hclog.Logger
+	Store           *store.Store
+	Client          *http.Client
+	ClientForSource func(string) *http.Client
+	Logger          hclog.Logger
 }
 
 // httpClient returns the worker's HTTP client, defaulting to the shared
 // SSRF-guarded short-lived client when none was supplied.
-func (w *XMLTVWorker) httpClient() *http.Client {
+func (w *XMLTVWorker) httpClient(sourceURL string) *http.Client {
+	if w.ClientForSource != nil {
+		return w.ClientForSource(sourceURL)
+	}
 	if w.Client != nil {
 		return w.Client
 	}
@@ -95,7 +99,7 @@ func (w *XMLTVWorker) RefreshOne(ctx context.Context, id string) error {
 		req.Header.Set("If-Modified-Since", src.LastModified)
 	}
 
-	resp, err := w.httpClient().Do(req)
+	resp, err := w.httpClient(src.URL).Do(req)
 	now := time.Now().UTC()
 	if err != nil {
 		_ = w.Store.MarkXMLTVStatus(ctx, id, "error: "+err.Error(), src.ETag, src.LastModified, now)
