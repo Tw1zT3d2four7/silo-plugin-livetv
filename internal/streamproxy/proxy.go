@@ -291,6 +291,14 @@ func extractToken(r *http.Request) (string, bool) {
 			return v, true
 		}
 	}
+	// The Silo plugin HTTP bridge may not forward Set-Cookie headers from
+	// the plugin's internal response. Media-element requests also cannot set
+	// Authorization headers, so accept the short-lived session token in the
+	// playback URL as a fallback. The token is still verified against the
+	// live session row and its secret using constant-time comparison.
+	if v := r.URL.Query().Get("st"); v != "" {
+		return v, true
+	}
 	return "", false
 }
 
