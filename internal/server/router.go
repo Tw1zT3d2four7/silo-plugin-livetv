@@ -2,8 +2,11 @@ package server
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+
+	webui "github.com/RXWatcher/silo-plugin-livetv/web"
 )
 
 // Routes returns the fully composed http.Handler for the plugin. The shape:
@@ -75,6 +78,18 @@ func (s *Server) Routes() http.Handler {
 			s.mountAdminSettings(adm)
 		})
 	})
+
+	// Serve the embedded Live TV SPA at the plugin portal root and its
+	// client-side routes. Keep unknown API paths as real 404s instead of
+	// accidentally returning index.html for an API typo.
+	spa := webui.SPAHandler()
+	r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, base+"/") || req.URL.Path == base {
+			http.NotFound(w, req)
+			return
+		}
+		spa.ServeHTTP(w, req)
+	}))
 
 	return r
 }
