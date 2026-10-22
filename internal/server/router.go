@@ -76,5 +76,9 @@ func (s *Server) Routes() http.Handler {
 		})
 	})
 
+	// Serve the embedded React SPA at the plugin mount root and its client-side routes.
+	// More-specific health and API routes above take precedence over this catch-all.
+	r.Handle("/*", livetvweb.SPAHandler())
+
 	return r
 }
