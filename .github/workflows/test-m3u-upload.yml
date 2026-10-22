@@ -1,0 +1,61 @@
+name: Test M3U private-source and upload build
+
+on:
+  push:
+    branches:
+      - m3u-private-source-and-file-upload
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build embedded frontend
+        run: make web
+
+      - name: Run Go and web tests
+        run: make test
+
+      - name: Build Linux amd64 plugin
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          make build
+          checksum="$(sha256sum "$PLUGIN_NAME" | awk '{print $1}')"
+          jq --arg checksum "$checksum" '.checksum = $checksum' cmd/silo-plugin-livetv/manifest.json > manifest.json
+          tar -czf "$PLUGIN_NAME-test-0.1.7-linux-amd64.tar.gz" "$PLUGIN_NAME" manifest.json "$PLUGIN_NAME.sha256"
+
+      - name: Upload test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: silo-plugin-livetv-test-0.1.7-linux-amd64
+          path: silo-plugin-livetv-test-0.1.7-linux-amd64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
