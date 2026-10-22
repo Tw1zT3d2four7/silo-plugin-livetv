@@ -41,9 +41,11 @@ Host: [`Silo-Server/silo-server`](https://github.com/Silo-Server/silo-server). S
 | --- | --- | --- |
 | `database_url` | yes | Postgres DSN scoped to the `livetv` schema, e.g. `postgres://plugin_livetv:...@host:5432/silo?search_path=livetv&sslmode=disable`. |
 
+Silo delivers this setting to the plugin through its Runtime.Configure RPC. The plugin does not expect `PLUGIN_CONFIG_DATABASE_URL` to be injected into its process environment.
+
 Everything else lives in the admin UI at `/admin/settings` and is editable at runtime without a restart: M3U and XMLTV source URLs, refresh intervals, per-user and global concurrency caps, and idle-session timeouts used by the reaper.
 
-The plugin applies its own migrations at startup. To provision the role and schema:
+The plugin applies its own migrations after it receives the saved configuration. To provision the role and schema:
 
 ```sql
 CREATE ROLE plugin_livetv WITH LOGIN PASSWORD '<chosen>';
@@ -59,4 +61,4 @@ GRANT CONNECT ON DATABASE silo TO plugin_livetv;
 
 ## Build and release
 
-The repository owns its build and release workflow. Pushes to `main` run Go and web tests, build the Linux AMD64 plugin, generate a checksum-bearing manifest and downloadable tar.gz package, publish these assets to the rolling `plugin-latest` GitHub Release, and publish a GHCR package image. GitHub also exposes source ZIP/TAR archives for the release tag. This workflow no longer depends on RXWatcher's reusable workflow or `CATALOG_SSH_KEY`. Publishing release metadata into a shared plugin catalog is a separate step and is not yet configured.
+The repository owns its build and release workflow. Pushes to `main` run Go and web tests, build the Linux AMD64 plugin, generate a checksum-bearing manifest and downloadable tar.gz package, publish these assets to the rolling `plugin-latest` GitHub Release, and publish a GHCR package image. GitHub also exposes source ZIP/TAR archives for the release tag. Publishing release metadata into a shared plugin catalog is a separate step and is not yet configured.
