@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - m3u-private-source-and-file-upload
+      - iptv-alpha
   workflow_dispatch:
 
 permissions:
