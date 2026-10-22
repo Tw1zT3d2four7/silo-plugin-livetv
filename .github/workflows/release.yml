@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/self-contained-release-workflow
+      - fix/config-bootstrap
   pull_request:
     branches:
       - main
@@ -64,7 +65,6 @@ jobs:
           make build
           file "$PLUGIN_NAME"
           sha256sum "$PLUGIN_NAME" | awk '{print $1}' > "$PLUGIN_NAME.sha256"
-          # These exact names are required by the Silo catalog updater.
           cp "$PLUGIN_NAME" plugin-linux-amd64
           sha256sum plugin-linux-amd64 > checksums.txt
 
