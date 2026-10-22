@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -186,12 +185,6 @@ func (d *Deps) CreateSession(w http.ResponseWriter, r *http.Request) {
 	} else {
 		playbackURL = d.basePath() + "/stream/" + sessID + ".ts"
 	}
-	// Do not rely solely on Set-Cookie: some plugin hosts' HTTP bridges
-	// strip Set-Cookie from the internal handler response. The media element
-	// cannot attach a custom Authorization header, so carry the opaque token
-	// on the playback URL as a fallback. The proxy validates it against the
-	// stored session secret before returning any stream bytes.
-	playbackURL += "?st=" + url.QueryEscape(value)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
