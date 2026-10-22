@@ -160,6 +160,11 @@ func (d *Deps) ProxyHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "rewrite failed", http.StatusBadGateway)
 		return
 	}
+	// Every rewritten segment request needs the same session authorization
+	// as the playlist request. Browsers/media libraries cannot attach the
+	// plugin's session cookie reliably through the host bridge.
+	streamToken := url.QueryEscape(tokenValue(sessID, sess.SessionSecret))
+	rewritten = bytes.ReplaceAll(rewritten, []byte("/segment?u="), []byte("/segment?st="+streamToken+"&u="))
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	w.Header().Set("Cache-Control", "no-store")
