@@ -101,7 +101,6 @@ func main() {
 		}
 
 		streamClient := httpclient.Streaming()
-		refreshClient := httpclient.ShortLived()
 		limits := streamproxy.Limits{
 			PlaylistCacheTTL: envDuration("PLUGIN_CONFIG_PLAYLIST_CACHE_TTL", 2*time.Second),
 			GlobalStreamCap: envInt("PLUGIN_CONFIG_GLOBAL_STREAM_CAP", 500),
@@ -113,8 +112,8 @@ func main() {
 			Store: st, Settings: snap, Logger: logger.Named("streamproxy"),
 			HTTP: streamClient, Limits: limits,
 		}
-		m3uWorker := &refresh.M3UWorker{Store: st, Client: refreshClient, Logger: logger.Named("m3u")}
-		xmltvWorker := &refresh.XMLTVWorker{Store: st, Client: refreshClient, Logger: logger.Named("xmltv")}
+		m3uWorker := &refresh.M3UWorker{Store: st, ClientForSource: httpclient.ShortLivedForSource, Logger: logger.Named("m3u")}
+		xmltvWorker := &refresh.XMLTVWorker{Store: st, ClientForSource: httpclient.ShortLivedForSource, Logger: logger.Named("xmltv")}
 		srv := &server.Server{
 			Store: st, Stream: streamDeps, Settings: snap, Logger: logger.Named("api"),
 			M3UWorker: m3uWorker, XMLTVWorker: xmltvWorker, Snapshot: snap,
