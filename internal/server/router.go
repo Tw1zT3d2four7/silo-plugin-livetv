@@ -4,8 +4,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-
-	livetvweb "github.com/RXWatcher/silo-plugin-livetv/web"
 )
 
 // Routes returns the fully composed http.Handler for the plugin. The shape:
@@ -58,18 +56,11 @@ func (s *Server) Routes() http.Handler {
 			}
 		})
 
-		// Stream byte routes accept the plugin's stream cookie/bearer when
-		// available, but also need Silo's authenticated user context because
-		// the host bridge may not forward Set-Cookie from CreateSession to the
-		// browser. The stream proxy fallback only allows that user to read
-		// their own live session, never another user's session.
+		// Stream byte routes: cookie/bearer auth, no session header needed.
 		if s.Stream != nil {
-			api.Group(func(stream chi.Router) {
-				stream.Use(RequireSession)
-				stream.Get("/stream/{session_id}.ts", s.Stream.ProxyMPEGTS)
-				stream.Get("/stream/{session_id}.m3u8", s.Stream.ProxyHLSPlaylist)
-				stream.Get("/stream/{session_id}/segment", s.Stream.ProxyHLSSegment)
-			})
+			api.Get("/stream/{session_id}.ts", s.Stream.ProxyMPEGTS)
+			api.Get("/stream/{session_id}.m3u8", s.Stream.ProxyHLSPlaylist)
+			api.Get("/stream/{session_id}/segment", s.Stream.ProxyHLSSegment)
 		}
 
 		// Admin subrouter — gated by RequireAdmin. Sub-mounts live in
@@ -84,10 +75,6 @@ func (s *Server) Routes() http.Handler {
 			s.mountAdminSettings(adm)
 		})
 	})
-
-	// Serve the embedded React SPA at the plugin mount root and its client-side routes.
-	// More-specific health and API routes above take precedence over this catch-all.
-	r.Handle("/*", livetvweb.SPAHandler())
 
 	return r
 }
