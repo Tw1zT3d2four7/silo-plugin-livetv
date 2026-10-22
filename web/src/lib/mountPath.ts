@@ -1,9 +1,10 @@
-// The plugin SPA is served under /api/v1/plugins/{installationId}/. The
-// installationId is not known at build time, so we derive it at runtime from
-// window.location.pathname. Returns empty string on the dev server (no plugin
-// proxy prefix) so the SPA can be served from / during local development.
+// Silo exposes plugin pages and HTTP routes beneath an installation-scoped
+// content prefix. Current hosts use /api/v2/plugin-content/plugins/{id}; keep
+// the older /api/v1/plugins/{id} prefix supported for compatible deployments.
+// The installation ID is discovered at runtime, not baked into the build.
+// Return an empty prefix on the local dev server.
 export function extractMountPath(pathname: string): string {
-  const m = pathname.match(/^(\/api\/v1\/plugins\/\d+)/);
+  const m = pathname.match(/^(\/api\/(?:v2\/plugin-content|v1)\/plugins\/\d+)/);
   return m ? m[1] : '';
 }
 
