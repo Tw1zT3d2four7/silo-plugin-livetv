@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, Tabs, Switch } from 'radix-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -6,6 +6,7 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  Upload,
   XIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -63,6 +64,7 @@ function M3USources() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<AdminM3USource | null>(null);
   const [creating, setCreating] = useState(false);
+  const uploadInput = useRef<HTMLInputElement>(null);
 
   const listQuery = useQuery({
     queryKey: ['admin', 'sources', 'm3u'],
@@ -77,6 +79,15 @@ function M3USources() {
       qc.invalidateQueries({ queryKey: ['admin', 'sources', 'm3u'] });
     },
     onError: (err: Error) => toast.error(`Delete failed: ${err.message}`),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => adminApi.sources.m3uUpload(file),
+    onSuccess: (result) => {
+      toast.success(`Imported ${result.channels} channels from ${result.name}`);
+      qc.invalidateQueries({ queryKey: ['admin', 'sources', 'm3u'] });
+    },
+    onError: (err: Error) => toast.error(`M3U upload failed: ${err.message}`),
   });
 
   const refreshMutation = useMutation({
@@ -100,6 +111,7 @@ function M3USources() {
       isLoading={listQuery.isPending}
       error={listQuery.error as Error | null}
       onAdd={() => setCreating(true)}
+      onUpload={() => uploadInput.current?.click()}
       onEdit={setEditing}
       onDelete={(id) => deleteMutation.mutate(id)}
       onRefresh={(id) => refreshMutation.mutate(id)}
@@ -119,6 +131,17 @@ function M3USources() {
           onClose={() => setCreating(false)}
         />
       ) : null}
+      <input
+        ref={uploadInput}
+        type="file"
+        accept=".m3u,.m3u8,.txt,audio/x-mpegurl,application/vnd.apple.mpegurl"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) uploadMutation.mutate(file);
+          event.currentTarget.value = '';
+        }}
+      />
     </SourcesPanel>
   );
 }
@@ -200,6 +223,7 @@ interface SourcesPanelProps<T extends AdminM3USource | AdminXMLTVSource> {
   isLoading: boolean;
   error: Error | null;
   onAdd: () => void;
+  onUpload?: () => void;
   onEdit: (src: T) => void;
   onDelete: (id: string) => void;
   onRefresh: (id: string) => void;
@@ -214,6 +238,7 @@ function SourcesPanel<T extends AdminM3USource | AdminXMLTVSource>({
   isLoading,
   error,
   onAdd,
+  onUpload,
   onEdit,
   onDelete,
   onRefresh,
@@ -229,13 +254,24 @@ function SourcesPanel<T extends AdminM3USource | AdminXMLTVSource>({
         <h2 className="text-sm font-semibold uppercase tracking-wider text-[color:var(--color-muted-foreground)]">
           {title}
         </h2>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-black transition-colors hover:bg-amber-400"
-        >
-          <Plus size={14} /> Add source
-        </button>
+        <div className="flex items-center gap-2">
+          {onUpload ? (
+            <button
+              type="button"
+              onClick={onUpload}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--color-border)] px-3 py-1.5 text-sm font-medium transition-colors hover:bg-[color:var(--color-surface-hover)]"
+            >
+              <Upload size={14} /> Upload M3U
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-black transition-colors hover:bg-amber-400"
+          >
+            <Plus size={14} /> Add source
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -290,12 +326,20 @@ function SourcesPanel<T extends AdminM3USource | AdminXMLTVSource>({
                   {renderExtraColumn ? renderExtraColumn(src) : null}
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex items-center gap-1">
-                      <IconButton title="Refresh now" onClick={() => onRefresh(src.id)}>
-                        <RefreshCw size={14} />
-                      </IconButton>
-                      <IconButton title="Edit" onClick={() => onEdit(src)}>
-                        <Pencil size={14} />
-                      </IconButton>
+                      {src.url.startsWith('upload://') ? (
+                        <span className="px-2 text-[11px] text-[color:var(--color-muted-foreground)]" title="Static uploaded playlist. Upload a new file to update channels.">
+                          static
+                        </span>
+                      ) : (
+                        <>
+                          <IconButton title="Refresh now" onClick={() => onRefresh(src.id)}>
+                            <RefreshCw size={14} />
+                          </IconButton>
+                          <IconButton title="Edit" onClick={() => onEdit(src)}>
+                            <Pencil size={14} />
+                          </IconButton>
+                        </>
+                      )}
                       <IconButton
                         title="Delete"
                         destructive
